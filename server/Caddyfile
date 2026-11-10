@@ -1,0 +1,16 @@
+# Caddy сам получает HTTPS-сертификат для KAIP_DOMAIN (Let's Encrypt).
+# Пароль проверяет панель Kaip; к экрану (noVNC) пускает только после входа.
+{$KAIP_DOMAIN} {
+	handle_path /vnc/* {
+		forward_auth desktop:8000 {
+			uri /auth/check
+			# Проверка пароля — обычный HTTP-запрос, заголовки WebSocket ей не нужны.
+			header_up -Upgrade
+			header_up -Connection
+		}
+		reverse_proxy desktop:6080
+	}
+	handle {
+		reverse_proxy desktop:8000
+	}
+}

@@ -1,0 +1,26 @@
+services:
+  desktop:
+    build: ./desktop
+    image: kaip-desktop
+    restart: unless-stopped
+    env_file: .env
+    shm_size: 512mb
+    volumes:
+      - ./data/home:/home/user   # Wine, настройки программ, AppImage
+      - ./data/kaip:/data        # список программ, deb-пакеты, общая папка с телефоном
+    expose: ["8000", "6080"]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    env_file: .env
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [desktop]
+
+volumes:
+  caddy_data:
+  caddy_config:

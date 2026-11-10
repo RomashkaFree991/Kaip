@@ -1,0 +1,10 @@
+server/.env
+server/data/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.apk
+*.iml
+.idea/
+__pycache__/

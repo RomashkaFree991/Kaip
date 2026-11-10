@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_menu xmlns="http://openbox.org/3.4/menu">
+  <menu id="root-menu" label="Kaip">
+    <item label="Терминал"><action name="Execute"><command>xterm</command></action></item>
+    <item label="Проводник Windows"><action name="Execute"><command>wine explorer</command></action></item>
+    <item label="Настройки Wine"><action name="Execute"><command>winecfg</command></action></item>
+    <separator />
+    <item label="Перезапустить Openbox"><action name="Restart" /></item>
+  </menu>
+</openbox_menu>

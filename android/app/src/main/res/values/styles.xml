@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="kaip_bg">#14161C</color>
+    <color name="kaip_icon_bg">#4F78F0</color>
+    <style name="AppTheme" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/kaip_bg</item>
+        <item name="android:colorPrimary">#5B8CFF</item>
+        <item name="android:colorAccent">#5B8CFF</item>
+        <item name="android:statusBarColor">@color/kaip_bg</item>
+    </style>
+</resources>

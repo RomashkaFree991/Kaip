@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14161c">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/static/icon.svg">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
+<title>Kaip</title>
+<style>
+  :root {
+    --bg:#14161c; --card:#1d2029; --card2:#252937; --line:#2c3140; --text:#e8eaf0; --muted:#8b91a1;
+    --accent:#5b8cff; --ok:#3ecf8e; --warn:#ffb648; --err:#ff6b6b;
+    --nav-h:64px; --safe-b:env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui, -apple-system, Roboto, sans-serif; }
+  button, input, select { font:inherit; color:inherit; }
+  button { cursor:pointer; }
+  header { position:sticky; top:0; z-index:5; background:var(--bg); padding:14px 16px 10px; display:flex; align-items:center; gap:10px; }
+  header img { width:28px; height:28px; }
+  header h1 { font-size:20px; margin:0; flex:1; }
+  main { padding:0 16px calc(var(--nav-h) + var(--safe-b) + 16px); max-width:820px; margin:0 auto; }
+  section[hidden] { display:none !important; }
+  .card { background:var(--card); border-radius:16px; padding:14px; margin-bottom:12px; }
+  .card h2 { font-size:15px; margin:0 0 10px; color:var(--muted); font-weight:600; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .row > * { min-width:0; }
+  .grow { flex:1; }
+  .btn { border:0; border-radius:12px; padding:11px 14px; background:var(--card2); font-weight:600; white-space:nowrap; }
+  .btn.primary { background:var(--accent); color:#fff; }
+  .btn.danger { background:#3a2026; color:var(--err); }
+  .btn.small { padding:7px 10px; font-size:13px; border-radius:10px; }
+  .btn:disabled { opacity:.5; }
+  input[type=text], input[type=url], select { width:100%; padding:11px 12px; border-radius:12px; border:1px solid var(--line); background:#12141a; }
+  .muted { color:var(--muted); font-size:13px; }
+  .hint { color:var(--muted); font-size:13px; margin:8px 0 0; }
+  .bar { height:6px; border-radius:3px; background:#12141a; overflow:hidden; margin-top:6px; }
+  .bar > i { display:block; height:100%; background:var(--accent); width:0; transition:width .2s; }
+  .apps { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px; }
+  .app { background:var(--card); border-radius:16px; padding:12px; display:flex; flex-direction:column; gap:8px; }
+  .app .top { display:flex; gap:10px; align-items:center; }
+  .badge { flex:none; width:40px; height:40px; border-radius:11px; display:grid; place-items:center; font-size:11px; font-weight:800; letter-spacing:.3px; }
+  .badge.exe { background:#23314f; color:#86a8ff; }
+  .badge.deb { background:#3a2430; color:#ff8fb1; }
+  .badge.appimage { background:#1f3a33; color:#5fe0b3; }
+  .badge.cmd { background:#383021; color:#ffc46b; }
+  .app .name { font-weight:600; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; word-break:break-word; }
+  .app .actions { display:flex; gap:6px; margin-top:auto; }
+  .app .actions .btn { flex:1; padding:9px 6px; }
+  .empty { text-align:center; padding:26px 10px; color:var(--muted); }
+  .tools { display:flex; gap:8px; overflow-x:auto; padding-bottom:2px; }
+  .job { border-top:1px solid var(--line); padding:10px 0 4px; }
+  .job:first-of-type { border-top:0; padding-top:0; }
+  .job pre { margin:6px 0 0; max-height:140px; overflow:auto; background:#12141a; padding:8px; border-radius:8px; font-size:11px; white-space:pre-wrap; word-break:break-all; }
+  .st-running { color:var(--warn); } .st-done { color:var(--ok); } .st-error { color:var(--err); }
+  .file { display:flex; align-items:center; gap:10px; padding:10px 0; border-top:1px solid var(--line); }
+  .file:first-child { border-top:0; }
+  .file .ico { flex:none; width:34px; height:34px; border-radius:9px; background:var(--card2); display:grid; place-items:center; font-size:11px; font-weight:800; color:var(--muted); }
+  .file .ico.dir { background:#23314f; color:#86a8ff; }
+  .file .info { flex:1; min-width:0; }
+  .file .info div:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .crumbs { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px; }
+  .crumbs button { border:0; background:none; color:var(--accent); padding:2px 4px; }
+  .stat { margin-bottom:12px; }
+  .stat .row { justify-content:space-between; }
+  .proc { display:flex; align-items:center; gap:10px; padding:9px 0; border-top:1px solid var(--line); }
+  .proc:first-child { border-top:0; }
+  nav { position:fixed; left:0; right:0; bottom:0; z-index:10; display:flex; background:#181a21; border-top:1px solid var(--line); padding-bottom:var(--safe-b); }
+  nav button { flex:1; height:var(--nav-h); border:0; background:none; color:var(--muted); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-size:12px; }
+  nav button svg { width:24px; height:24px; }
+  nav button.on { color:var(--accent); }
+  #screen { position:fixed; inset:0; z-index:20; background:#000; }
+  #screen iframe { border:0; width:100%; height:100%; display:block; }
+  #screen .float { position:absolute; right:10px; bottom:calc(10px + var(--safe-b)); z-index:2; display:flex; gap:8px; }
+  #screen .float button { border:0; border-radius:999px; background:rgba(29,32,41,.85); color:#fff; padding:10px 14px; font-weight:600; backdrop-filter:blur(6px); }
+  #modal { position:fixed; inset:0; z-index:50; background:rgba(0,0,0,.6); display:flex; align-items:flex-end; justify-content:center; }
+  #modal[hidden] { display:none; }
+  #modal .sheet { background:var(--card); width:100%; max-width:560px; border-radius:20px 20px 0 0; padding:18px 16px calc(18px + var(--safe-b)); max-height:85vh; overflow:auto; }
+  #modal h3 { margin:0 0 12px; }
+  #modal label { display:block; margin:10px 0 4px; color:var(--muted); font-size:13px; }
+  #modal pre { background:#12141a; padding:10px; border-radius:10px; font-size:11px; white-space:pre-wrap; word-break:break-all; max-height:55vh; overflow:auto; }
+  #modal .row { margin-top:14px; flex-wrap:wrap; }
+  #toast { position:fixed; left:50%; bottom:calc(var(--nav-h) + var(--safe-b) + 14px); transform:translateX(-50%); z-index:60; background:#2b3040; padding:10px 16px; border-radius:12px; max-width:calc(100% - 32px); box-shadow:0 6px 24px rgba(0,0,0,.4); }
+  #toast[hidden] { display:none; }
+</style>
+</head>
+<body>
+
+<header><img src="/static/icon.svg" alt=""><h1 id="title">Программы</h1></header>
+
+<main>
+  <!-- ======================= Программы ======================= -->
+  <section id="programs">
+    <div class="card">
+      <h2>Добавить программу</h2>
+      <div class="row">
+        <button class="btn primary grow" id="pickBtn">Выбрать файл с телефона</button>
+        <input type="file" id="pickInput" multiple hidden>
+      </div>
+      <div id="upProg" hidden>
+        <div class="muted" id="upText"></div>
+        <div class="bar"><i id="upBar"></i></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <input type="url" id="urlInput" class="grow" placeholder="…или ссылка на .exe / .deb / .AppImage">
+        <button class="btn" id="urlBtn">Скачать</button>
+      </div>
+      <p class="hint">Поддерживаются .exe, .msi, .deb, .AppImage. По ссылке сервер скачивает файл сам, а не через телефон, так быстрее.</p>
+    </div>
+
+    <div class="card" id="jobsCard" hidden>
+      <h2>Задачи</h2>
+      <div id="jobs"></div>
+    </div>
+
+    <div class="tools" style="margin-bottom:12px">
+      <button class="btn small" data-scan>Найти установленные</button>
+      <button class="btn small" data-tool="terminal">Терминал</button>
+      <button class="btn small" data-tool="explorer">Проводник Windows</button>
+      <button class="btn small" data-tool="winecfg">Настройки Wine</button>
+      <button class="btn small" data-custom>+ Своя команда</button>
+    </div>
+
+    <div class="apps" id="apps"></div>
+  </section>
+
+  <!-- ======================= Файлы ======================= -->
+  <section id="files" hidden>
+    <div class="card">
+      <h2>Общая папка телефона и сервера</h2>
+      <p class="muted" style="margin:0 0 10px">На сервере это <b>~/Телефон</b>, в Windows-программах — диск <b>P:</b>. Загружай сюда файлы с телефона и скачивай результаты обратно.</p>
+      <div class="row">
+        <button class="btn primary grow" id="fUpBtn">Загрузить с телефона</button>
+        <button class="btn" id="fMkdir">Новая папка</button>
+        <input type="file" id="fUpInput" multiple hidden>
+      </div>
+      <div id="fProg" hidden><div class="muted" id="fProgText"></div><div class="bar"><i id="fProgBar"></i></div></div>
+    </div>
+    <div class="card">
+      <div class="crumbs" id="crumbs"></div>
+      <div id="flist"></div>
+    </div>
+  </section>
+
+  <!-- ======================= Сервер ======================= -->
+  <section id="server" hidden>
+    <div class="card" id="stats"></div>
+    <div class="card">
+      <h2>Запущено</h2>
+      <div id="procs"></div>
+      <button class="btn danger" id="killAll" style="margin-top:10px; width:100%">Закрыть все программы</button>
+    </div>
+    <div class="card">
+      <h2>Разрешение экрана</h2>
+      <div class="row">
+        <select id="resSel" class="grow"></select>
+        <button class="btn" id="resBtn">Применить</button>
+      </div>
+      <p class="hint">На телефоне удобнее 1280×720 и горизонтальная ориентация. Чем меньше разрешение, тем быстрее картинка.</p>
+    </div>
+    <div class="card">
+      <div class="row">
+        <button class="btn grow" id="appSettings" hidden>Сменить сервер</button>
+        <button class="btn grow" id="logout">Выйти</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ======================= Экран ======================= -->
+<div id="screen" hidden>
+  <div class="float">
+    <button id="screenBack">☰ Меню</button>
+  </div>
+</div>
+
+<nav>
+  <button data-tab="programs" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>Программы</button>
+  <button data-tab="screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Экран</button>
+  <button data-tab="files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Файлы</button>
+  <button data-tab="server"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>Сервер</button>
+</nav>
+
+<div id="modal" hidden><div class="sheet" id="sheet"></div></div>
+<div id="toast" hidden></div>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const native = window.KaipApp || null;
+const TITLES = { programs:'Программы', files:'Файлы', server:'Сервер', screen:'Экран' };
+const INSTALLABLE = /\.(exe|msi|deb|appimage|bat)$/i;
+let tab = 'programs', filesPath = '', pollTimer = null;
+
+function toast(msg, ms = 3500) {
+  const t = $('#toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, ms);
+}
+function fmtSize(b) {
+  if (b < 1024) return b + ' Б';
+  const u = ['КБ','МБ','ГБ','ТБ']; let i = -1;
+  do { b /= 1024; i++; } while (b >= 1024 && i < u.length - 1);
+  return b.toFixed(b < 10 ? 1 : 0) + ' ' + u[i];
+}
+async function api(path, opts = {}) {
+  const o = { ...opts };
+  if (o.json !== undefined) { o.body = JSON.stringify(o.json); o.headers = { 'Content-Type':'application/json' }; o.method = o.method || 'POST'; delete o.json; }
+  const r = await fetch(path, o);
+  if (r.status === 401) { location.href = '/login'; throw new Error('auth'); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || ('Ошибка ' + r.status));
+  return j;
+}
+function upload(url, files, onProgress) {
+  return new Promise((resolve, reject) => {
+    const fd = new FormData();
+    for (const f of files) fd.append('file', f, f.name);
+    const x = new XMLHttpRequest();
+    x.open('POST', url);
+    x.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total, e.loaded, e.total);
+    x.onload = () => { let j = {}; try { j = JSON.parse(x.responseText); } catch {}
+      x.status < 300 ? resolve(j) : reject(new Error(j.error || ('Ошибка ' + x.status))); };
+    x.onerror = () => reject(new Error('Связь оборвалась'));
+    x.send(fd);
+  });
+}
+
+// ---------------- навигация
+function show(name) {
+  tab = name;
+  for (const s of ['programs','files','server']) $('#' + s).hidden = s !== name;
+  $('#screen').hidden = name !== 'screen';
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
+  $('#title').textContent = TITLES[name];
+  if (name === 'screen') openScreen();
+  if (native && native.onScreen) native.onScreen(name === 'screen');
+  if (name === 'programs') loadApps();
+  if (name === 'files') loadFiles(filesPath);
+  if (name === 'server') loadStatus();
+  try { localStorage.setItem('kaip.tab', name === 'screen' ? 'programs' : name); } catch {}
+}
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => show(b.dataset.tab));
+$('#screenBack').onclick = () => show('programs');
+
+function openScreen() {
+  if (!$('#screen iframe')) {
+    const f = document.createElement('iframe');
+    f.src = '/vnc/vnc.html?autoconnect=1&reconnect=1&reconnect_delay=1500&resize=scale&show_dot=1&path=vnc/websockify';
+    f.allow = 'clipboard-read; clipboard-write; fullscreen';
+    $('#screen').prepend(f);
+  }
+  setTimeout(() => { const f = $('#screen iframe'); f && f.focus(); }, 100);
+}
+
+// Кнопка «назад» на Android: true — обработали сами.
+window.kaipBack = function () {
+  if (!$('#modal').hidden) { closeModal(); return true; }
+  if (tab === 'screen') { show('programs'); return true; }
+  if (tab === 'files' && filesPath) { loadFiles(filesPath.split('/').slice(0, -1).join('/')); return true; }
+  if (tab !== 'programs') { show('programs'); return true; }
+  return false;
+};
+
+// ---------------- модальное окно
+function modal(html) { $('#sheet').innerHTML = html; $('#modal').hidden = false; return $('#sheet'); }
+function closeModal() { $('#modal').hidden = true; $('#sheet').innerHTML = ''; }
+$('#modal').onclick = (e) => { if (e.target.id === 'modal') closeModal(); };
+function confirmBox(text, okText = 'Да') {
+  return new Promise(res => {
+    const s = modal(`<h3>${esc(text)}</h3><div class="row"><button class="btn grow" data-no>Отмена</button><button class="btn danger grow" data-yes>${esc(okText)}</button></div>`);
+    s.querySelector('[data-no]').onclick = () => { closeModal(); res(false); };
+    s.querySelector('[data-yes]').onclick = () => { closeModal(); res(true); };
+  });
+}
+
+// ---------------- программы
+let appsCache = [];
+async function loadApps() {
+  const { apps } = await api('/api/apps');
+  appsCache = apps;
+  const box = $('#apps');
+  if (!apps.length) {
+    box.innerHTML = `<div class="empty" style="grid-column:1/-1">Пока нет программ.<br>Загрузи .exe, .deb или .AppImage. Можно с телефона или по ссылке.</div>`;
+    return;
+  }
+  const label = { exe:'EXE', deb:'DEB', appimage:'APP', cmd:'CMD' };
+  box.innerHTML = apps.map(a => `
+    <div class="app">
+      <div class="top"><div class="badge ${esc(a.type)}">${label[a.type] || 'APP'}</div><div class="name">${esc(a.name)}</div></div>
+      <div class="actions">
+        <button class="btn primary" data-run="${esc(a.id)}">Запустить</button>
+        <button class="btn" data-more="${esc(a.id)}" aria-label="Ещё">⋯</button>
+      </div>
+    </div>`).join('');
+}
+$('#apps').onclick = async (e) => {
+  const run = e.target.closest('[data-run]'), more = e.target.closest('[data-more]');
+  if (run) {
+    run.disabled = true;
+    try { await api(`/api/apps/${run.dataset.run}/run`, { method:'POST' }); toast('Запускаю… окно появится на экране'); show('screen'); }
+    catch (x) { toast(x.message); }
+    run.disabled = false;
+  } else if (more) {
+    appMenu(appsCache.find(a => a.id === more.dataset.more));
+  }
+};
+function appMenu(a) {
+  const s = modal(`
+    <h3>${esc(a.name)}</h3>
+    <label>Название</label><input type="text" id="eName" value="${esc(a.name)}">
+    <label>Команда запуска</label><input type="text" id="eCmd" value="${esc(a.cmd)}">
+    <p class="hint">Если Electron-программа не открывается, добавь в конец <b>--no-sandbox</b>. Для .exe можно дописать параметры после пути.</p>
+    <div class="row">
+      <button class="btn primary grow" data-save>Сохранить</button>
+      <button class="btn grow" data-log>Лог ошибок</button>
+    </div>
+    <div class="row">
+      <button class="btn danger grow" data-del>Убрать из списка</button>
+      <button class="btn danger grow" data-delall>Удалить с сервера</button>
+    </div>`);
+  s.querySelector('[data-save]').onclick = async () => {
+    try { await api(`/api/apps/${a.id}`, { method:'PUT', json:{ name:$('#eName').value, cmd:$('#eCmd').value } }); closeModal(); loadApps(); }
+    catch (x) { toast(x.message); }
+  };
+  s.querySelector('[data-log]').onclick = async () => {
+    const { log } = await api(`/api/apps/${a.id}/log`);
+    modal(`<h3>Лог: ${esc(a.name)}</h3><pre>${esc(log)}</pre><div class="row"><button class="btn grow" onclick="closeModal()">Закрыть</button></div>`);
+    const pre = $('#sheet pre'); pre.scrollTop = pre.scrollHeight;
+  };
+  s.querySelector('[data-del]').onclick = async () => { await api(`/api/apps/${a.id}`, { method:'DELETE' }); closeModal(); loadApps(); };
+  s.querySelector('[data-delall]').onclick = async () => {
+    if (!await confirmBox(`Удалить «${a.name}» вместе с файлами программы?`, 'Удалить')) return;
+    await api(`/api/apps/${a.id}?files=1`, { method:'DELETE' }); loadApps(); pollJobs();
+  };
+}
+
+$('#pickBtn').onclick = () => $('#pickInput').click();
+$('#pickInput').onchange = async (e) => {
+  const files = [...e.target.files]; e.target.value = '';
+  if (!files.length) return;
+  $('#upProg').hidden = false; $('#pickBtn').disabled = true;
+  const total = files.reduce((s, f) => s + f.size, 0);
+  try {
+    const { results } = await upload('/api/upload', files, (p, l) => {
+      $('#upBar').style.width = (p * 100) + '%';
+      $('#upText').textContent = `Загрузка на сервер: ${fmtSize(l)} из ${fmtSize(total)}`;
+    });
+    $('#upText').textContent = 'Обработка…';
+    toast(results.map(r => r.message).join('\n'), 6000);
+    loadApps(); pollJobs();
+  } catch (x) { toast(x.message); }
+  $('#upProg').hidden = true; $('#pickBtn').disabled = false; $('#upBar').style.width = 0;
+};
+$('#urlBtn').onclick = async () => {
+  const url = $('#urlInput').value.trim();
+  if (!url) return;
+  try { await api('/api/install-url', { json:{ url } }); $('#urlInput').value = ''; toast('Сервер скачивает файл…'); pollJobs(); }
+  catch (x) { toast(x.message); }
+};
+document.querySelector('[data-scan]').onclick = async () => {
+  try {
+    const { found } = await api('/api/scan-wine', { method:'POST' });
+    toast(found.length ? 'Найдено: ' + found.join(', ') : 'Новых Windows-программ не найдено');
+    loadApps();
+  } catch (x) { toast(x.message); }
+};
+document.querySelectorAll('[data-tool]').forEach(b => b.onclick = async () => {
+  try { await api('/api/tool/' + b.dataset.tool, { method:'POST' }); show('screen'); } catch (x) { toast(x.message); }
+});
+document.querySelector('[data-custom]').onclick = () => {
+  const s = modal(`<h3>Своя команда</h3>
+    <label>Название</label><input type="text" id="cName" placeholder="Например: Блокнот">
+    <label>Команда</label><input type="text" id="cCmd" placeholder="wine notepad">
+    <p class="hint">Любая команда Linux, она запускается на экране сервера. Пример: <b>wine notepad</b>, <b>xterm</b>.</p>
+    <div class="row"><button class="btn primary grow" data-ok>Добавить</button></div>`);
+  s.querySelector('[data-ok]').onclick = async () => {
+    try { await api('/api/apps/custom', { json:{ name:$('#cName').value, cmd:$('#cCmd').value } }); closeModal(); loadApps(); }
+    catch (x) { toast(x.message); }
+  };
+};
+
+// ---------------- задачи (установка/скачивание)
+async function pollJobs() {
+  clearTimeout(pollTimer);
+  let jobs = [];
+  try { ({ jobs } = await api('/api/jobs')); } catch { return; }
+  const recent = jobs.filter(j => j.status === 'running' || Date.now() / 1000 - (j.finished || 0) < 600);
+  $('#jobsCard').hidden = !recent.length;
+  const st = { running:'выполняется…', done:'готово', error:'ошибка' };
+  $('#jobs').innerHTML = recent.map(j => `
+    <div class="job"><div class="row"><b class="grow">${esc(j.title)}</b><span class="st-${j.status}">${st[j.status]}</span></div>
+    <details ${j.status !== 'done' ? 'open' : ''}><summary class="muted">подробности</summary><pre>${esc(j.log.join('\n'))}</pre></details></div>`).join('');
+  $('#jobs').querySelectorAll('pre').forEach(p => p.scrollTop = p.scrollHeight);
+  if (jobs.some(j => j.status === 'running')) pollTimer = setTimeout(pollJobs, 2000);
+  else if (tab === 'programs') loadApps();
+}
+
+// ---------------- файлы
+async function loadFiles(path) {
+  let j;
+  try { j = await api('/api/files?path=' + encodeURIComponent(path)); } catch (x) { toast(x.message); return; }
+  filesPath = j.path;
+  const parts = filesPath ? filesPath.split('/') : [];
+  $('#crumbs').innerHTML = `<button data-go="">Телефон</button>` +
+    parts.map((p, i) => `<span class="muted">/</span><button data-go="${esc(parts.slice(0, i + 1).join('/'))}">${esc(p)}</button>`).join('');
+  const full = (n) => (filesPath ? filesPath + '/' : '') + n;
+  $('#flist').innerHTML = j.items.length ? j.items.map(it => {
+    const ext = it.dir ? '' : (it.name.includes('.') ? it.name.split('.').pop().slice(0, 4).toUpperCase() : '');
+    return `<div class="file">
+      <div class="ico ${it.dir ? 'dir' : ''}">${it.dir ? 'DIR' : esc(ext)}</div>
+      <div class="info" ${it.dir ? `data-go="${esc(full(it.name))}" style="cursor:pointer"` : ''}>
+        <div>${esc(it.name)}</div>
+        <div class="muted">${it.dir ? 'папка' : fmtSize(it.size)} · ${new Date(it.mtime * 1000).toLocaleString('ru')}</div>
+      </div>
+      ${!it.dir && INSTALLABLE.test(it.name) ? `<button class="btn small" data-install="${esc(full(it.name))}">Установить</button>` : ''}
+      ${!it.dir ? `<a class="btn small" style="text-decoration:none" href="/download?path=${encodeURIComponent(full(it.name))}" download>Скачать</a>` : ''}
+      <button class="btn small danger" data-rm="${esc(full(it.name))}" aria-label="Удалить">✕</button>
+    </div>`;
+  }).join('') : '<div class="empty">Папка пуста</div>';
+}
+$('#files').onclick = async (e) => {
+  const go = e.target.closest('[data-go]'), rm = e.target.closest('[data-rm]'), inst = e.target.closest('[data-install]');
+  if (go) loadFiles(go.dataset.go);
+  if (rm && await confirmBox(`Удалить «${rm.dataset.rm.split('/').pop()}»?`, 'Удалить')) {
+    try { await api('/api/files/delete', { json:{ path:rm.dataset.rm } }); loadFiles(filesPath); } catch (x) { toast(x.message); }
+  }
+  if (inst) {
+    try { const { result } = await api('/api/files/install', { json:{ path:inst.dataset.install } }); toast(result.message, 6000); pollJobs(); }
+    catch (x) { toast(x.message); }
+  }
+};
+$('#fUpBtn').onclick = () => $('#fUpInput').click();
+$('#fUpInput').onchange = async (e) => {
+  const files = [...e.target.files]; e.target.value = '';
+  if (!files.length) return;
+  $('#fProg').hidden = false;
+  const total = files.reduce((s, f) => s + f.size, 0);
+  try {
+    const { saved } = await upload('/api/files/upload?path=' + encodeURIComponent(filesPath), files, (p, l) => {
+      $('#fProgBar').style.width = (p * 100) + '%'; $('#fProgText').textContent = `${fmtSize(l)} из ${fmtSize(total)}`;
+    });
+    toast('Загружено: ' + saved.length);
+  } catch (x) { toast(x.message); }
+  $('#fProg').hidden = true; $('#fProgBar').style.width = 0;
+  loadFiles(filesPath);
+};
+$('#fMkdir').onclick = () => {
+  const s = modal(`<h3>Новая папка</h3><input type="text" id="mkName" placeholder="Название"><div class="row"><button class="btn primary grow" data-ok>Создать</button></div>`);
+  s.querySelector('[data-ok]').onclick = async () => {
+    try { await api('/api/files/mkdir', { json:{ path:filesPath, name:$('#mkName').value } }); closeModal(); loadFiles(filesPath); }
+    catch (x) { toast(x.message); }
+  };
+};
+
+// ---------------- сервер
+async function loadStatus() {
+  let s;
+  try { s = await api('/api/status'); } catch (x) { toast(x.message); return; }
+  const bar = (label, used, total, text) => {
+    const p = total ? Math.round(used * 100 / total) : 0;
+    const color = p > 90 ? 'var(--err)' : p > 70 ? 'var(--warn)' : 'var(--accent)';
+    return `<div class="stat"><div class="row"><span>${label}</span><span class="muted">${text || (total ? `${fmtSize(used)} / ${fmtSize(total)}` : 'нет')}</span></div>
+      <div class="bar"><i style="width:${p}%;background:${color}"></i></div></div>`;
+  };
+  $('#stats').innerHTML = `<h2>Ресурсы сервера</h2>` +
+    bar('Оперативная память', s.mem.used, s.mem.total) + bar('Подкачка (swap)', s.swap.used, s.swap.total) +
+    bar('Диск', s.disk.used, s.disk.total) + bar(`Процессор (ядер: ${s.cores})`, s.cpu, 100, s.cpu.toFixed(0) + '%');
+  $('#procs').innerHTML = s.procs.length ? s.procs.map(p => `
+    <div class="proc"><div class="grow" style="min-width:0"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.name)}</div><div class="muted">${fmtSize(p.mem)}</div></div>
+    <button class="btn small danger" data-kill="${p.pid}">Закрыть</button></div>`).join('') : '<div class="muted">Ничего не запущено</div>';
+  const sel = $('#resSel');
+  sel.innerHTML = s.resolutions.map(r => `<option ${r === s.screen ? 'selected' : ''}>${r}</option>`).join('');
+  if (s.screen && !s.resolutions.includes(s.screen)) sel.insertAdjacentHTML('afterbegin', `<option selected>${esc(s.screen)}</option>`);
+  if (tab === 'server') { clearTimeout(loadStatus.t); loadStatus.t = setTimeout(() => tab === 'server' && loadStatus(), 5000); }
+}
+$('#procs').onclick = async (e) => {
+  const k = e.target.closest('[data-kill]');
+  if (k) { k.disabled = true; try { await api(`/api/procs/${k.dataset.kill}/kill`, { method:'POST' }); } catch (x) { toast(x.message); } loadStatus(); }
+};
+$('#killAll').onclick = async () => {
+  if (!await confirmBox('Закрыть все запущенные программы? Несохранённые данные пропадут.', 'Закрыть')) return;
+  await api('/api/procs/kill-all', { method:'POST' }); loadStatus();
+};
+$('#resBtn').onclick = async () => {
+  try { await api('/api/screen', { json:{ size:$('#resSel').value } }); toast('Разрешение изменено'); } catch (x) { toast(x.message); }
+};
+$('#logout').onclick = async () => { await api('/api/logout', { method:'POST' }); location.href = '/login'; };
+if (native && native.openSettings) { $('#appSettings').hidden = false; $('#appSettings').onclick = () => native.openSettings(); }
+
+// ---------------- старт
+let startTab = 'programs';
+try { startTab = localStorage.getItem('kaip.tab') || 'programs'; } catch {}
+show(['programs','files','server'].includes(startTab) ? startTab : 'programs');
+pollJobs();
+</script>
+</body>
+</html>
