@@ -1,0 +1,20 @@
+# Сайт Kaip. Пароль проверяет панель; к экрану (noVNC) пускает только после входа.
+# Режим сертификата (KAIP_TLS_MODE):
+#   acme — бесплатный сертификат Let's Encrypt (нужен свободный порт 443);
+#   self — собственный сертификат из certs/, если 80 и 443 заняты другими программами.
+{$KAIP_DOMAIN}:{$KAIP_HTTPS_PORT:443} {
+	import /etc/caddy/tls-{$KAIP_TLS_MODE:acme}.caddy
+
+	handle_path /vnc/* {
+		forward_auth desktop:8000 {
+			uri /auth/check
+			# Проверка пароля — обычный HTTP-запрос, заголовки WebSocket ей не нужны.
+			header_up -Upgrade
+			header_up -Connection
+		}
+		reverse_proxy desktop:6080
+	}
+	handle {
+		reverse_proxy desktop:8000
+	}
+}

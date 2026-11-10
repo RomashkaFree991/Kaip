@@ -3,22 +3,28 @@ package ru.kaip.app;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.app.DownloadManager;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
+import android.media.MediaScannerConnection;
 import android.net.Uri;
+import android.net.http.SslCertificate;
+import android.net.http.SslError;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.provider.MediaStore;
 import android.text.InputType;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.SslErrorHandler;
 import android.webkit.URLUtil;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -30,6 +36,27 @@ import android.webkit.WebViewClient;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.Toast;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.security.KeyStore;
+import java.security.MessageDigest;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
+import java.util.ArrayList;
+import java.util.List;
+
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
 
 /**
  * Kaip — оболочка над веб-панелью сервера.
@@ -45,6 +72,8 @@ public class MainActivity extends Activity {
     private SharedPreferences prefs;
     private ValueCallback<Uri[]> fileCallback;
     private String[] pendingDownload;
+    private final List<SslErrorHandler> pendingSsl = new ArrayList<>();
+    private AlertDialog sslDialog;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -110,6 +139,11 @@ public class MainActivity extends Activity {
                 if (request.isForMainFrame()) {
                     showError(String.valueOf(error.getDescription()));
                 }
+            }
+
+            @Override
+            public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+                onSslError(handler, error);
             }
 
             @Override
@@ -239,28 +273,202 @@ public class MainActivity extends Activity {
             requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQ_STORAGE);
             return;
         }
-        String name = URLUtil.guessFileName(url, contentDisposition, mimeType);
-        Uri uri = Uri.parse(url);
-        String fromQuery = uri.getQueryParameter("path");
-        if (fromQuery != null && !fromQuery.isEmpty()) {
-            name = fromQuery.substring(fromQuery.lastIndexOf('/') + 1);
+        String guessed = URLUtil.guessFileName(url, contentDisposition, mimeType);
+        String fromQuery = Uri.parse(url).getQueryParameter("path");
+        final String name = (fromQuery != null && !fromQuery.isEmpty())
+                ? fromQuery.substring(fromQuery.lastIndexOf('/') + 1) : guessed;
+        final String mime = (mimeType == null || mimeType.isEmpty()) ? "application/octet-stream" : mimeType;
+        final String cookie = CookieManager.getInstance().getCookie(url);
+        toast("Скачиваю: " + name);
+        // Качаем сами, а не через DownloadManager: он не знает про собственный сертификат сервера.
+        new Thread(() -> {
+            try {
+                saveDownload(url, userAgent, cookie, name, mime);
+                runOnUiThread(() -> toast("Сохранено в «Загрузки/Kaip»: " + name));
+            } catch (Exception e) {
+                runOnUiThread(() -> toast("Не удалось скачать " + name + ": " + e.getMessage()));
+            }
+        }).start();
+    }
+
+    private void saveDownload(String url, String userAgent, String cookie, String name, String mime) throws Exception {
+        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+        if (conn instanceof HttpsURLConnection) {
+            ((HttpsURLConnection) conn).setSSLSocketFactory(trustingFactory(Uri.parse(url).getHost()));
+        }
+        conn.setConnectTimeout(20000);
+        conn.setReadTimeout(60000);
+        if (cookie != null) {
+            conn.setRequestProperty("Cookie", cookie);
+        }
+        if (userAgent != null) {
+            conn.setRequestProperty("User-Agent", userAgent);
+        }
+        int code = conn.getResponseCode();
+        if (code != 200) {
+            conn.disconnect();
+            throw new IOException("сервер ответил " + code);
+        }
+        try (InputStream in = conn.getInputStream()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ContentResolver resolver = getContentResolver();
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.Downloads.DISPLAY_NAME, name);
+                values.put(MediaStore.Downloads.MIME_TYPE, mime);
+                values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Kaip");
+                values.put(MediaStore.Downloads.IS_PENDING, 1);
+                Uri item = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                if (item == null) {
+                    throw new IOException("нет доступа к «Загрузкам»");
+                }
+                try (OutputStream out = resolver.openOutputStream(item)) {
+                    copy(in, out);
+                } catch (Exception e) {
+                    resolver.delete(item, null, null);
+                    throw e;
+                }
+                values.clear();
+                values.put(MediaStore.Downloads.IS_PENDING, 0);
+                resolver.update(item, values, null, null);
+            } else {
+                @SuppressWarnings("deprecation")
+                File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Kaip");
+                if (!dir.isDirectory() && !dir.mkdirs()) {
+                    throw new IOException("не удалось создать папку");
+                }
+                File file = new File(dir, name);
+                int dot = name.lastIndexOf('.');
+                for (int i = 1; file.exists(); i++) {
+                    file = new File(dir, dot > 0 ? name.substring(0, dot) + " (" + i + ")" + name.substring(dot) : name + " (" + i + ")");
+                }
+                try (OutputStream out = new FileOutputStream(file)) {
+                    copy(in, out);
+                }
+                MediaScannerConnection.scanFile(this, new String[]{file.getAbsolutePath()}, null, null);
+            }
+        } finally {
+            conn.disconnect();
+        }
+    }
+
+    private static void copy(InputStream in, OutputStream out) throws IOException {
+        byte[] buf = new byte[1 << 16];
+        int n;
+        while ((n = in.read(buf)) > 0) {
+            out.write(buf, 0, n);
+        }
+    }
+
+    // ------------------------------------------------------------ собственный сертификат сервера
+
+    private String pinKey(String host) {
+        return "pin:" + (host == null ? "" : host.toLowerCase());
+    }
+
+    private void onSslError(SslErrorHandler handler, SslError error) {
+        String host = Uri.parse(error.getUrl()).getHost();
+        String serverHost = Uri.parse(serverUrl()).getHost();
+        String fp = fingerprint(error.getCertificate());
+        if (host == null || !host.equalsIgnoreCase(serverHost) || fp == null) {
+            handler.cancel();
+            return;
+        }
+        String pinned = prefs.getString(pinKey(host), null);
+        if (fp.equals(pinned)) {
+            handler.proceed();
+            return;
+        }
+        pendingSsl.add(handler);
+        if (sslDialog != null && sslDialog.isShowing()) {
+            return;
+        }
+        String title = pinned == null ? "Собственный сертификат сервера" : "Внимание: сертификат сервера изменился!";
+        String text = (pinned == null
+                ? "Сервер использует свой сертификат (порт 443 был занят). Сверь отпечаток с тем, что показал install.sh в конце установки:"
+                : "Отпечаток не совпадает с запомненным. Если ты не переустанавливал сервер — не доверяй. Новый отпечаток:")
+                + "\n\n" + fp;
+        sslDialog = new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage(text)
+                .setCancelable(false)
+                .setPositiveButton("Совпадает, доверять", (d, w) -> {
+                    prefs.edit().putString(pinKey(host), fp).apply();
+                    for (SslErrorHandler h : pendingSsl) h.proceed();
+                    pendingSsl.clear();
+                })
+                .setNegativeButton("Отмена", (d, w) -> {
+                    for (SslErrorHandler h : pendingSsl) h.cancel();
+                    pendingSsl.clear();
+                    showError("Сертификат не подтверждён");
+                })
+                .show();
+    }
+
+    @SuppressWarnings("deprecation")
+    private static String fingerprint(SslCertificate cert) {
+        if (cert == null) {
+            return null;
         }
         try {
-            DownloadManager.Request r = new DownloadManager.Request(uri);
-            String cookie = CookieManager.getInstance().getCookie(url);
-            if (cookie != null) {
-                r.addRequestHeader("Cookie", cookie);
+            byte[] der;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                X509Certificate x = cert.getX509Certificate();
+                der = x == null ? null : x.getEncoded();
+            } else {
+                der = SslCertificate.saveState(cert).getByteArray("x509-certificate");
             }
-            r.addRequestHeader("User-Agent", userAgent);
-            r.setTitle(name);
-            r.setMimeType(mimeType);
-            r.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-            r.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "Kaip/" + name);
-            ((DownloadManager) getSystemService(DOWNLOAD_SERVICE)).enqueue(r);
-            toast("Скачивается в «Загрузки/Kaip»: " + name);
+            return der == null ? null : sha256(der);
         } catch (Exception e) {
-            toast("Не удалось скачать: " + e.getMessage());
+            return null;
         }
+    }
+
+    /** SHA-256 в том же виде, что печатает openssl: AB:CD:... */
+    private static String sha256(byte[] data) throws Exception {
+        byte[] d = MessageDigest.getInstance("SHA-256").digest(data);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < d.length; i++) {
+            if (i > 0) sb.append(':');
+            sb.append(String.format("%02X", d[i]));
+        }
+        return sb.toString();
+    }
+
+    /** Доверяет системным сертификатам и, дополнительно, подтверждённому пользователем сертификату сервера. */
+    private SSLSocketFactory trustingFactory(String host) throws Exception {
+        TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+        tmf.init((KeyStore) null);
+        X509TrustManager system = (X509TrustManager) tmf.getTrustManagers()[0];
+        String pin = prefs.getString(pinKey(host), null);
+        X509TrustManager tm = new X509TrustManager() {
+            @Override
+            public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+                system.checkClientTrusted(chain, authType);
+            }
+
+            @Override
+            public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+                try {
+                    system.checkServerTrusted(chain, authType);
+                } catch (CertificateException e) {
+                    try {
+                        if (pin != null && chain != null && chain.length > 0 && pin.equals(sha256(chain[0].getEncoded()))) {
+                            return;
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    throw e;
+                }
+            }
+
+            @Override
+            public X509Certificate[] getAcceptedIssuers() {
+                return system.getAcceptedIssuers();
+            }
+        };
+        SSLContext ctx = SSLContext.getInstance("TLS");
+        ctx.init(null, new TrustManager[]{tm}, null);
+        return ctx.getSocketFactory();
     }
 
     @Override

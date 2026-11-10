@@ -1,0 +1,2 @@
+# Собственный сертификат, созданный install.sh.
+tls /etc/caddy/certs/kaip.crt /etc/caddy/certs/kaip.key

@@ -72,23 +72,58 @@ port_owner() {
   echo "${owner:-неизвестно}"
 }
 
-say "Проверяю порты 80 и 443"
+say "Проверяю порты"
 docker compose rm -sf caddy >/dev/null 2>&1 || true   # наш прошлый запуск не считается
-http_port=80
+CANDIDATES="8443 2083 2087 2096 9443 10443 18443 20443 28443 30443"
+free_ports() {   # free_ports N [исключить...] — первые N свободных портов из списка
+  local n=$1 found=() p; shift
+  for p in $CANDIDATES; do
+    [[ " $* " == *" $p "* ]] && continue
+    port_busy "$p" || found+=("$p")
+    [ ${#found[@]} -ge "$n" ] && break
+  done
+  echo "${found[@]}"
+}
+
+tls_mode=acme
 https_port=443
 if port_busy 443; then
-  echo "Порт 443 занят программой: $(port_owner 443)"
-  echo "Он нужен для HTTPS. Посмотреть подробнее:  ss -ltnp | grep ':443 '"
-  echo "Если эта программа не нужна — останови её (например: systemctl disable --now nginx) и запусти install.sh снова."
-  exit 1
+  echo "Порт 443 занят программой: $(port_owner 443)."
+  echo "Без портов 80/443 бесплатный сертификат Let's Encrypt не выдают —"
+  echo "включаю собственный сертификат на свободном порту."
+  tls_mode=self
+  https_port=$(free_ports 1)
+  [ -n "$https_port" ] || { echo "Не нашёл свободного порта из списка: $CANDIDATES"; exit 1; }
 fi
+http_port=80
 if port_busy 80; then
-  echo "Порт 80 занят программой: $(port_owner 80) — обойдусь без него, сертификат получу через порт 443."
+  echo "Порт 80 занят программой: $(port_owner 80) — обойдусь без него."
   http_port=8080
-  while port_busy "$http_port"; do http_port=$((http_port + 1)); done
+  while port_busy "$http_port" || [ "$http_port" = "$https_port" ]; do http_port=$((http_port + 1)); done
 fi
+spare=$(free_ports 3 "$https_port" "$http_port")
+echo "HTTPS-порт: $https_port   HTTP-порт: $http_port   запасные свободные: ${spare:-нет}"
+set_env KAIP_TLS_MODE "$tls_mode"
 set_env KAIP_HTTP_PORT "$http_port"
 set_env KAIP_HTTPS_PORT "$https_port"
+
+domain=$(grep '^KAIP_DOMAIN=' .env | cut -d"'" -f2)
+if [ "$tls_mode" = self ]; then
+  mkdir -p caddy/certs
+  if [ ! -f caddy/certs/kaip.crt ] || ! grep -qx "$domain" caddy/certs/domain 2>/dev/null; then
+    say "Создаю собственный сертификат для $domain"
+    command -v openssl >/dev/null 2>&1 || apt-get install -y openssl
+    san="DNS:${domain}"
+    ip_from_domain=$(echo "$domain" | grep -oE '^[0-9]+-[0-9]+-[0-9]+-[0-9]+' | tr '-' '.' || true)
+    [ -n "$ip_from_domain" ] && san="${san},IP:${ip_from_domain}"
+    openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=${domain}" \
+      -addext "subjectAltName=${san}" \
+      -keyout caddy/certs/kaip.key -out caddy/certs/kaip.crt 2>/dev/null
+    chmod 644 caddy/certs/kaip.crt && chmod 600 caddy/certs/kaip.key
+    echo "$domain" > caddy/certs/domain
+  fi
+  fingerprint=$(openssl x509 -in caddy/certs/kaip.crt -noout -fingerprint -sha256 | cut -d= -f2)
+fi
 
 if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
   say "Открываю порты в ufw"
@@ -99,7 +134,18 @@ mkdir -p data/home data/kaip
 say "Собираю и запускаю (первый раз 5–15 минут)"
 docker compose up -d --build
 
-domain=$(grep '^KAIP_DOMAIN=' .env | cut -d"'" -f2)
 say "Готово!"
-echo "Открой на телефоне:  https://${domain}"
-echo "Сертификат HTTPS выпускается автоматически в первую минуту — если не открылось, подожди и обнови."
+url="https://${domain}"
+[ "$https_port" != 443 ] && url="${url}:${https_port}"
+echo "Открой на телефоне:  ${url}"
+if [ "$tls_mode" = self ]; then
+  echo
+  echo "Сертификат собственный (порт 443 занят), поэтому:"
+  echo "  • приложение Kaip один раз спросит, доверять ли серверу — сверь отпечаток:"
+  echo "      ${fingerprint}"
+  echo "  • в Chrome будет предупреждение: «Дополнительные» → «Перейти на сайт»."
+  echo "Если провайдер закрыл порт ${https_port}, запасные свободные порты: ${spare:-нет}"
+  echo "(поставь другой в KAIP_HTTPS_PORT в файле .env и выполни: docker compose up -d)"
+else
+  echo "Сертификат HTTPS выпускается автоматически в первую минуту — если не открылось, подожди и обнови."
+fi

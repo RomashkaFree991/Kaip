@@ -8,3 +8,4 @@ android/local.properties
 *.iml
 .idea/
 __pycache__/
+server/caddy/certs/
