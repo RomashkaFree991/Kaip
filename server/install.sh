@@ -56,9 +56,43 @@ ENV
   chmod 600 .env
 fi
 
+set_env() {
+  if grep -q "^$1=" .env; then sed -i "s|^$1=.*|$1='$2'|" .env; else echo "$1='$2'" >> .env; fi
+}
+port_busy() {
+  if command -v ss >/dev/null 2>&1; then
+    [ -n "$(ss -Hltn "sport = :$1" 2>/dev/null)" ]
+  else
+    (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null
+  fi
+}
+port_owner() {
+  local owner=""
+  command -v ss >/dev/null 2>&1 && owner=$(ss -Hltnp "sport = :$1" 2>/dev/null | grep -o 'users:(("[^"]*"' | head -1 | cut -d'"' -f2)
+  echo "${owner:-неизвестно}"
+}
+
+say "Проверяю порты 80 и 443"
+docker compose rm -sf caddy >/dev/null 2>&1 || true   # наш прошлый запуск не считается
+http_port=80
+https_port=443
+if port_busy 443; then
+  echo "Порт 443 занят программой: $(port_owner 443)"
+  echo "Он нужен для HTTPS. Посмотреть подробнее:  ss -ltnp | grep ':443 '"
+  echo "Если эта программа не нужна — останови её (например: systemctl disable --now nginx) и запусти install.sh снова."
+  exit 1
+fi
+if port_busy 80; then
+  echo "Порт 80 занят программой: $(port_owner 80) — обойдусь без него, сертификат получу через порт 443."
+  http_port=8080
+  while port_busy "$http_port"; do http_port=$((http_port + 1)); done
+fi
+set_env KAIP_HTTP_PORT "$http_port"
+set_env KAIP_HTTPS_PORT "$https_port"
+
 if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
-  say "Открываю порты 80 и 443 в ufw"
-  ufw allow 80/tcp && ufw allow 443/tcp
+  say "Открываю порты в ufw"
+  ufw allow "$http_port"/tcp && ufw allow "$https_port"/tcp
 fi
 
 mkdir -p data/home data/kaip

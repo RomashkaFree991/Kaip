@@ -14,7 +14,9 @@ services:
     image: caddy:2
     restart: unless-stopped
     env_file: .env
-    ports: ["80:80", "443:443"]
+    ports:
+      - "${KAIP_HTTP_PORT:-80}:80"
+      - "${KAIP_HTTPS_PORT:-443}:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
