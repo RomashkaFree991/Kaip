@@ -92,8 +92,42 @@ public class MainActivity extends Activity {
         } else if (serverUrl().isEmpty()) {
             askServer(false);
         } else {
-            web.loadUrl(serverUrl());
+            connect();
         }
+    }
+
+    private final android.os.Handler ui = new android.os.Handler(android.os.Looper.getMainLooper());
+    private boolean mainLoaded;
+    private final Runnable watchdog = () -> {
+        if (!mainLoaded) {
+            web.stopLoading();
+            showError("Сервер не ответил за 30 секунд. Чаще всего это значит, что хостинг закрыл порт "
+                    + portOf(serverUrl()) + ". Открой этот адрес в Chrome на телефоне: если там тоже не открывается — "
+                    + "поставь запасной порт в KAIP_HTTPS_PORT на сервере.");
+        }
+    };
+
+    /** Показывает «Подключаюсь…» (WebView держит эту страницу, пока грузится сервер) и следит за таймаутом. */
+    private void connect() {
+        String url = serverUrl();
+        if (url.isEmpty()) {
+            askServer(false);
+            return;
+        }
+        mainLoaded = false;
+        String html = "<html><head><meta name='viewport' content='width=device-width,initial-scale=1'>"
+                + "<style>body{background:#14161c;color:#e8eaf0;font-family:sans-serif;display:flex;flex-direction:column;"
+                + "align-items:center;justify-content:center;height:90vh;text-align:center;padding:16px}p{color:#8b91a1}</style>"
+                + "</head><body><h2>Подключаюсь…</h2><p>" + escape(url) + "</p><p>Kaip " + BuildConfig.VERSION_NAME + "</p></body></html>";
+        web.loadDataWithBaseURL(null, html, "text/html", "utf-8", null);
+        ui.removeCallbacks(watchdog);
+        ui.postDelayed(watchdog, 30000);
+        ui.post(() -> web.loadUrl(url));
+    }
+
+    private static String portOf(String url) {
+        int p = Uri.parse(url).getPort();
+        return p > 0 ? String.valueOf(p) : "443";
     }
 
     private String serverUrl() {
@@ -148,6 +182,10 @@ public class MainActivity extends Activity {
 
             @Override
             public void onPageFinished(WebView view, String url) {
+                if (url != null && url.startsWith("http")) {
+                    mainLoaded = true;
+                    ui.removeCallbacks(watchdog);
+                }
                 CookieManager.getInstance().flush();
             }
         });
@@ -204,7 +242,7 @@ public class MainActivity extends Activity {
                     }
                     prefs.edit().putString(PREF_URL, url).apply();
                     web.clearHistory();
-                    web.loadUrl(url);
+                    connect();
                 });
         if (cancelable) {
             b.setNegativeButton("Отмена", null);
@@ -227,6 +265,8 @@ public class MainActivity extends Activity {
     }
 
     private void showError(String description) {
+        ui.removeCallbacks(watchdog);
+        mainLoaded = true;
         String html = "<html><head><meta name='viewport' content='width=device-width,initial-scale=1'>"
                 + "<style>body{background:#14161c;color:#e8eaf0;font-family:sans-serif;display:flex;"
                 + "flex-direction:column;align-items:center;justify-content:center;height:90vh;text-align:center;padding:16px}"
@@ -371,6 +411,8 @@ public class MainActivity extends Activity {
         String fp = fingerprint(error.getCertificate());
         if (host == null || !host.equalsIgnoreCase(serverHost) || fp == null) {
             handler.cancel();
+            showError("Ошибка сертификата (код " + error.getPrimaryError() + ") для " + error.getUrl()
+                    + (fp == null ? ". Не удалось прочитать отпечаток." : ""));
             return;
         }
         String pinned = prefs.getString(pinKey(host), null);
@@ -521,7 +563,7 @@ public class MainActivity extends Activity {
                 if (serverUrl().isEmpty()) {
                     askServer(false);
                 } else {
-                    web.loadUrl(serverUrl());
+                    connect();
                 }
             });
         }
