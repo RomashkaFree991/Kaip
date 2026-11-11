@@ -424,6 +424,8 @@ public class MainActivity extends Activity {
         if (sslDialog != null && sslDialog.isShowing()) {
             return;
         }
+        // Пока человек сверяет отпечаток, таймер ожидания сервера не должен срабатывать.
+        ui.removeCallbacks(watchdog);
         String title = pinned == null ? "Собственный сертификат сервера" : "Внимание: сертификат сервера изменился!";
         String text = (pinned == null
                 ? "Сервер использует свой сертификат (порт 443 был занят). Сверь отпечаток с тем, что показал install.sh в конце установки:"
@@ -434,9 +436,14 @@ public class MainActivity extends Activity {
                 .setMessage(text)
                 .setCancelable(false)
                 .setPositiveButton("Совпадает, доверять", (d, w) -> {
-                    prefs.edit().putString(pinKey(host), fp).apply();
+                    prefs.edit().putString(pinKey(host), fp).commit();
                     for (SslErrorHandler h : pendingSsl) h.proceed();
                     pendingSsl.clear();
+                    // Если загрузка за это время всё же оборвалась — подключаемся заново
+                    // (теперь сертификат запомнен и пропускается без вопросов).
+                    ui.postDelayed(() -> {
+                        if (!mainLoaded) connect();
+                    }, 4000);
                 })
                 .setNegativeButton("Отмена", (d, w) -> {
                     for (SslErrorHandler h : pendingSsl) h.cancel();
